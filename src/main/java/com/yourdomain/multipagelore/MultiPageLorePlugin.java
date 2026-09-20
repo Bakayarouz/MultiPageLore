@@ -1,6 +1,7 @@
 package com.yourdomain.multipagelore;
 
 import org.bukkit.NamespacedKey;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MultiPageLorePlugin extends JavaPlugin {
@@ -26,6 +27,18 @@ public class MultiPageLorePlugin extends JavaPlugin {
             getCommand("multipagelore").setExecutor(cmdHandler);
             getCommand("multipagelore").setTabCompleter(cmdHandler);
         }
+
+        // Background Inventory Scanner: Automatically pre-bakes items given via /mi give or plugins within 0.5 seconds
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) {
+                ItemStack[] contents = player.getInventory().getContents();
+                for (ItemStack item : contents) {
+                    if (item != null && !item.isEmpty()) {
+                        LoreManager.bakeItemIfNeeded(item);
+                    }
+                }
+            }
+        }, 0L, 10L); // Runs every 10 ticks (0.5 seconds)
 
         getLogger().info("MultiPageLore has been successfully enabled!");
     }
