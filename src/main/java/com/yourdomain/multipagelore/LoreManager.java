@@ -20,7 +20,6 @@ public class LoreManager {
     private static final String PAGE_DELIMITER = "\u0000"; 
     private static final String LINE_DELIMITER = "\u0001"; 
 
-    // Native 1.21 Adventure Serializers
     private static final GsonComponentSerializer GSON = GsonComponentSerializer.gson();
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
@@ -30,7 +29,6 @@ public class LoreManager {
     }
 
     public static boolean bakeItemIfNeeded(ItemStack item) {
-        // 1.21.1 Optimization: .isEmpty() is the fastest check for air blocks
         if (item == null || item.isEmpty() || !item.hasItemMeta()) return false;
         
         ItemMeta meta = item.getItemMeta();
@@ -44,12 +42,6 @@ public class LoreManager {
 
         List<List<Component>> pages = new ArrayList<>();
         List<Component> currentPage = new ArrayList<>();
-        
-        int maxCharLength = 0;
-        if (meta.hasDisplayName()) {
-            maxCharLength = PLAIN.serialize(meta.displayName()).length();
-        }
-
         boolean hasSeparator = false;
 
         for (Component line : lore) {
@@ -61,12 +53,7 @@ public class LoreManager {
                 currentPage.clear();
                 continue;
             }
-            
             currentPage.add(line);
-            
-            if (plainText.length() > maxCharLength) {
-                maxCharLength = plainText.length();
-            }
         }
         
         if (!hasSeparator) return false;
@@ -84,7 +71,8 @@ public class LoreManager {
 
         pdc.set(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING, serializedData.toString());
         pdc.set(MultiPageLorePlugin.CURRENT_PAGE_KEY, PersistentDataType.INTEGER, 0);
-        pdc.set(MultiPageLorePlugin.MAX_WIDTH_KEY, PersistentDataType.INTEGER, maxCharLength); 
+        
+        // Note: Removed the global MAX_WIDTH calculation from here to improve performance
         
         item.setItemMeta(meta);
         renderPage(item, 0);
@@ -119,20 +107,34 @@ public class LoreManager {
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
         
         String serializedData = pdc.get(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING);
-        int maxCharLength = pdc.getOrDefault(MultiPageLorePlugin.MAX_WIDTH_KEY, PersistentDataType.INTEGER, 20);
-        
         if (serializedData == null) return;
         
         String[] pages = serializedData.split(PAGE_DELIMITER);
         String[] lines = pages[pageIndex].split(LINE_DELIMITER);
 
+        // Calculate maximum width for THIS PAGE ONLY
+        int currentPageMaxWidth = 0;
+        
+        // Factor in the item name, as it also expands the tooltip box
+        if (meta.hasDisplayName()) {
+            currentPageMaxWidth = PLAIN.serialize(meta.displayName()).length();
+        }
+
         List<Component> newLore = new ArrayList<>(lines.length + 2);
         for (String line : lines) {
-            newLore.add(GSON.deserialize(line));
+            Component deserializedLine = GSON.deserialize(line);
+            newLore.add(deserializedLine);
+            
+            // Measure this specific line
+            int lineLen = PLAIN.serialize(deserializedLine).length();
+            if (lineLen > currentPageMaxWidth) {
+                currentPageMaxWidth = lineLen;
+            }
         }
 
         newLore.add(Component.empty());
-        newLore.add(LEGACY.deserialize(generateCenteredFooter(maxCharLength, pageIndex, pages.length)));
+        // Pass the dynamically calculated width to the footer generator
+        newLore.add(LEGACY.deserialize(generateCenteredFooter(currentPageMaxWidth, pageIndex, pages.length)));
 
         meta.lore(newLore);
         item.setItemMeta(meta);
@@ -150,7 +152,6 @@ public class LoreManager {
         
         dots.append(swapIcon);
 
-        // 1.21.1 Optimization: Use Native Adventure to strip colors instead of slow Regex
         String rawText = PLAIN.serialize(LEGACY.deserialize(dots.toString()));
         int dotsLen = rawText.length();
         
