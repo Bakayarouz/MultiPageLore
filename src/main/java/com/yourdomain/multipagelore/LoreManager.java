@@ -146,7 +146,7 @@ public class LoreManager {
             dots.append(i == currentPage ? activeDot : inactiveDot).append(" ");
         }
         
-        // Append custom icon
+        // Append custom icon directly without brackets
         dots.append(swapIcon);
 
         // Strip colors to calculate exact unformatted string length for centering
