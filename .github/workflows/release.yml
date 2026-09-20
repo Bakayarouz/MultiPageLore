@@ -1,9 +1,9 @@
-name: Build and Release Plugin
+name: Auto Build Plugin
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches:
+      - main # Runs automatically every time you push code to the main branch
 
 jobs:
   build:
@@ -29,10 +29,19 @@ jobs:
         id: version
         run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
 
-      - name: Upload Artifact to GitHub Release
+      # Option A: Upload the .jar as an Artifact (Downloads directly from the Actions tab)
+      - name: Upload Jar Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MultiPageLore-Latest
+          path: target/MultiPageLore-${{ env.VERSION }}.jar
+
+      # Option B: Maintain a rolling "Latest Dev Build" on the Releases page
+      - name: Update Latest Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: latest
+          name: "Latest Auto-Build"
+          body: "This is a continuously updated release generated automatically on the latest code push."
           files: target/MultiPageLore-${{ env.VERSION }}.jar
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+          prerelease: true
