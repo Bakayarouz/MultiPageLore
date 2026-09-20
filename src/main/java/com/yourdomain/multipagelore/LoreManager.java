@@ -14,6 +14,8 @@ import java.util.List;
 
 public class LoreManager {
 
+    private static MultiPageLorePlugin plugin;
+
     private static final String SEPARATOR_TEXT = "---page---";
     private static final String PAGE_DELIMITER = "\u0000"; 
     private static final String LINE_DELIMITER = "\u0001"; 
@@ -22,29 +24,32 @@ public class LoreManager {
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
 
+    public static void init(MultiPageLorePlugin instance) {
+        plugin = instance;
+    }
+
     public static boolean bakeItemIfNeeded(ItemStack item) {
-        // FAST EXIT 1: Is the item empty or missing meta?
         if (item == null || !item.hasItemMeta()) return false;
         
         ItemMeta meta = item.getItemMeta();
-        
-        // FAST EXIT 2: Does it have no lore at all?
         if (!meta.hasLore()) return false;
 
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
-        
-        // FAST EXIT 3: Has it already been baked by the plugin?
-        if (pdc.has(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING)) return true;
+        if (pdc.has(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING)) return false; 
 
         List<Component> lore = meta.lore();
         if (lore == null) return false;
 
         List<List<Component>> pages = new ArrayList<>();
         List<Component> currentPage = new ArrayList<>();
-        int maxPixelWidth = 0;
+        
+        int maxCharLength = 0;
+        if (meta.hasDisplayName()) {
+            maxCharLength = PLAIN.serialize(meta.displayName()).length();
+        }
+
         boolean hasSeparator = false;
 
-        // Process the lore lines
         for (Component line : lore) {
             String plainText = PLAIN.serialize(line);
             
@@ -57,17 +62,14 @@ public class LoreManager {
             
             currentPage.add(line);
             
-            // Calculate max width for perfect centering later
-            int lineWidth = getPixelWidth(plainText);
-            if (lineWidth > maxPixelWidth) maxPixelWidth = lineWidth;
+            if (plainText.length() > maxCharLength) {
+                maxCharLength = plainText.length();
+            }
         }
         
-        // FAST EXIT 4: It has lore, but no "---page---" separator. Leave it alone.
         if (!hasSeparator) return false;
-        
         if (!currentPage.isEmpty()) pages.add(currentPage);
 
-        // Serialize all components to a highly optimized string
         StringBuilder serializedData = new StringBuilder();
         for (int i = 0; i < pages.size(); i++) {
             List<Component> pageLines = pages.get(i);
@@ -78,14 +80,11 @@ public class LoreManager {
             if (i < pages.size() - 1) serializedData.append(PAGE_DELIMITER);
         }
 
-        // Save data directly to the item's NBT
         pdc.set(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING, serializedData.toString());
         pdc.set(MultiPageLorePlugin.CURRENT_PAGE_KEY, PersistentDataType.INTEGER, 0);
-        pdc.set(MultiPageLorePlugin.MAX_WIDTH_KEY, PersistentDataType.INTEGER, maxPixelWidth);
+        pdc.set(MultiPageLorePlugin.MAX_WIDTH_KEY, PersistentDataType.INTEGER, maxCharLength); 
         
         item.setItemMeta(meta);
-        
-        // Render the very first page instantly so the player never sees the raw formatting
         renderPage(item, 0);
         return true;
     }
@@ -98,7 +97,6 @@ public class LoreManager {
         String serializedData = pdc.get(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING);
         if (serializedData == null) return false;
 
-        // Fast total page calculation without using Regex
         int totalPages = 1;
         for (int i = 0; i < serializedData.length(); i++) {
             if (serializedData.charAt(i) == '\u0000') totalPages++;
@@ -119,7 +117,7 @@ public class LoreManager {
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
         
         String serializedData = pdc.get(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING);
-        int maxWidth = pdc.getOrDefault(MultiPageLorePlugin.MAX_WIDTH_KEY, PersistentDataType.INTEGER, 100);
+        int maxCharLength = pdc.getOrDefault(MultiPageLorePlugin.MAX_WIDTH_KEY, PersistentDataType.INTEGER, 20);
         
         if (serializedData == null) return;
         
@@ -131,38 +129,30 @@ public class LoreManager {
             newLore.add(GSON.deserialize(line));
         }
 
-        // Add empty line and dynamically centered footer
         newLore.add(Component.empty());
-        newLore.add(LEGACY.deserialize(generateCenteredFooter(maxWidth, pageIndex, pages.length)));
+        newLore.add(LEGACY.deserialize(generateCenteredFooter(maxCharLength, pageIndex, pages.length)));
 
         meta.lore(newLore);
         item.setItemMeta(meta);
     }
 
-    private static String generateCenteredFooter(int maxLineWidth, int currentPage, int totalPages) {
-        StringBuilder dots = new StringBuilder("&8[ ");
+    private static String generateCenteredFooter(int maxCharLength, int currentPage, int totalPages) {
+        String activeDot = plugin.getConfig().getString("active-dot", "&f●");
+        String inactiveDot = plugin.getConfig().getString("inactive-dot", "&7○");
+        String swapIcon = plugin.getConfig().getString("swap-icon", "&eⒻ");
+
+        StringBuilder dots = new StringBuilder();
         for (int i = 0; i < totalPages; i++) {
-            dots.append(i == currentPage ? "&f● " : "&7○ ");
+            dots.append(i == currentPage ? activeDot : inactiveDot).append(" ");
         }
-        dots.append("&8]");
+        
+        // Append custom icon
+        dots.append(swapIcon);
 
-        int dotsWidth = getPixelWidth(dots.toString().replaceAll("&[0-9a-fk-or]", ""));
-        if (dotsWidth >= maxLineWidth) return dots.toString(); 
-
-        int spacesRequired = (maxLineWidth - dotsWidth) / 8; // Divide by 8 for approximate space character padding
-        return " ".repeat(Math.max(0, spacesRequired)) + dots;
-    }
-
-    private static int getPixelWidth(String text) {
-        int width = 0;
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (c == 'i' || c == 'l' || c == '!' || c == '|' || c == '.' || c == ',' || c == ':' || c == ';') width += 2;
-            else if (c == ' ') width += 4;
-            else if (c == 't' || c == 'I' || c == '[' || c == ']') width += 4;
-            else if (c == 'k' || c == 'f') width += 5;
-            else width += 6; 
-        }
-        return width;
+        // Strip colors to calculate exact unformatted string length for centering
+        int dotsLen = dots.toString().replaceAll("&[0-9a-fk-or]", "").length();
+        int spacesRequired = Math.max(0, (maxCharLength - dotsLen) / 2);
+        
+        return " ".repeat(spacesRequired) + dots;
     }
 }
