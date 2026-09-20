@@ -6,14 +6,18 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public class MultiPageLorePlugin extends JavaPlugin {
 
+    public static NamespacedKey HEADER_KEY;
     public static NamespacedKey PAGES_KEY;
+    public static NamespacedKey FOOTER_KEY;
     public static NamespacedKey CURRENT_PAGE_KEY;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
 
+        HEADER_KEY = new NamespacedKey(this, "header_data");
         PAGES_KEY = new NamespacedKey(this, "pages_data");
+        FOOTER_KEY = new NamespacedKey(this, "footer_data");
         CURRENT_PAGE_KEY = new NamespacedKey(this, "current_page_index");
 
         LoreManager.init(this);
@@ -38,7 +42,7 @@ public class MultiPageLorePlugin extends JavaPlugin {
                     }
                 }
             }
-        }, 0L, 10L); // Runs every 10 ticks (0.5 seconds)
+        }, 0L, 10L);
 
         getLogger().info("MultiPageLore has been successfully enabled!");
     }
