@@ -1,5 +1,6 @@
 package com.yourdomain.multipagelore;
 
+import io.lumine.mythic.bukkit.events.MythicMobItemGenerateEvent;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -9,11 +10,11 @@ import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.event.inventory.InventoryType;
 
 import java.util.HashMap;
 import java.util.UUID;
@@ -33,20 +34,16 @@ public class MultiPageListener implements Listener {
         InventoryHolder holder = inv.getHolder();
         if (holder == null) return false;
 
-        // Check for MMOItems PluginInventory safely without causing strict class loading issues if absent
         boolean isMmoItemsUi = false;
         try {
             Class<?> pluginInventoryClass = Class.forName("net.Indyuce.mmoitems.gui.PluginInventory");
             if (pluginInventoryClass.isInstance(holder)) {
                 isMmoItemsUi = true;
             }
-        } catch (ClassNotFoundException ignored) {
-            // MMOItems is not present on the server
-        }
+        } catch (ClassNotFoundException ignored) {}
 
         if (isMmoItemsUi) return false;
 
-        // Allow player inventories, physical containers, horses, and the player's personal crafting view
         return holder instanceof org.bukkit.entity.Player || 
                holder instanceof org.bukkit.block.Container || 
                holder instanceof org.bukkit.entity.AbstractHorse ||
@@ -82,17 +79,28 @@ public class MultiPageListener implements Listener {
         }
     }
 
+    // MythicMobs native generation hook for instant pre-baking on drop/command
+    @EventHandler(priority = EventPriority.NORMAL)
+    public void onMythicItemGenerate(MythicMobItemGenerateEvent event) {
+        ItemStack item = event.getItemStack();
+        if (item != null && !item.isEmpty()) {
+            LoreManager.bakeItemIfNeeded(item);
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onInventoryClick(InventoryClickEvent event) {
         ItemStack item = event.getCurrentItem();
         
-        if (item == null || item.isEmpty() || !item.hasItemMeta()) return;
+        if (item == null || item.isEmpty()) return;
+
+        // Bake on click so administrative item explorers and plugin preview GUIs format instantly
+        LoreManager.bakeItemIfNeeded(item);
+
+        if (!item.hasItemMeta()) return;
 
         boolean isVirtualGUI = !isSafeInventory(event.getClickedInventory());
-
         if (!isVirtualGUI && event.isCancelled()) return;
-
-        LoreManager.bakeItemIfNeeded(item);
 
         String configAction = plugin.getConfig().getString("flip-action", "SWAP_OFFHAND").toUpperCase();
         ClickType targetClickType;
