@@ -212,17 +212,26 @@ public class LoreManager {
             }
         }
 
-        // 4. Render Centered Dot Indicator Footer
+        // 4. Calculate maximum character length for dynamic centering
+        int maxLineWidth = 0;
+        for (Component line : finalLore) {
+            int len = PLAIN.serialize(line).length();
+            if (len > maxLineWidth) {
+                maxLineWidth = len;
+            }
+        }
+
+        // 5. Render Centered Dot Indicator Footer
         if (rawPages.length > 1) {
             finalLore.add(Component.empty());
-            finalLore.add(buildFooter(rawPages.length, pageIndex));
+            finalLore.add(buildFooter(rawPages.length, pageIndex, maxLineWidth));
         }
 
         meta.lore(finalLore);
         item.setItemMeta(meta);
     }
 
-    private static Component buildFooter(int totalPages, int currentPage) {
+    private static Component buildFooter(int totalPages, int currentPage, int maxLineWidth) {
         StringBuilder footerBuilder = new StringBuilder();
         for (int i = 0; i < totalPages; i++) {
             if (i == currentPage) {
@@ -233,15 +242,18 @@ public class LoreManager {
         }
         footerBuilder.append("Ⓕ");
 
-        int estimatedVisualLength = (totalPages * 2) + 2;
-        int baseOffset = Math.max(1, (24 - estimatedVisualLength) / 2);
-        String padding = " ".repeat(Math.max(0, baseOffset));
+        String rawFooterText = footerBuilder.toString();
+        int footerLength = rawFooterText.length();
+
+        // Calculate exact space padding relative to the longest line on this specific page
+        int padCount = Math.max(0, (maxLineWidth - footerLength) / 2);
+        String padding = " ".repeat(padCount);
 
         String activeColor = plugin.getConfig().getString("footer.active-color", "&a");
         String inactiveColor = plugin.getConfig().getString("footer.inactive-color", "&7");
         String actionColor = plugin.getConfig().getString("footer.action-color", "&6");
 
-        String formatted = padding + footerBuilder.toString()
+        String formatted = padding + rawFooterText
                 .replace("●", ChatColor.translateAlternateColorCodes('&', activeColor + "●"))
                 .replace("○", ChatColor.translateAlternateColorCodes('&', inactiveColor + "○"))
                 .replace("Ⓕ", ChatColor.translateAlternateColorCodes('&', actionColor + "Ⓕ"));
