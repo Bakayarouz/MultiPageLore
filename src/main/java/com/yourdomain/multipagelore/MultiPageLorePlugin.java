@@ -23,16 +23,19 @@ public class MultiPageLorePlugin extends JavaPlugin {
         
         getServer().getPluginManager().registerEvents(new MultiPageListener(this), this);
 
-        // UNIVERSAL ITEM CATCHER: Runs every 10 ticks (0.5 seconds).
-        // Catches items given by console commands, MythicMobs, crates, or other plugins.
+        // UNIVERSAL ITEM CATCHER - OPTIMIZED FOR 1.21.1
+        // Runs every 10 ticks (0.5 seconds).
         getServer().getScheduler().runTaskTimer(this, () -> {
             for (Player player : getServer().getOnlinePlayers()) {
                 for (ItemStack item : player.getInventory().getContents()) {
-                    LoreManager.bakeItemIfNeeded(item);
+                    // Fast-fail before passing to the manager to save CPU
+                    if (item != null && !item.isEmpty() && item.hasItemMeta()) {
+                        LoreManager.bakeItemIfNeeded(item);
+                    }
                 }
             }
         }, 10L, 10L);
 
-        getLogger().info("MultiPageLore enabled with universal item scanning.");
+        getLogger().info("MultiPageLore optimized for 1.21.1 enabled.");
     }
 }
