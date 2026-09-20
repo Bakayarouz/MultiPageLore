@@ -23,25 +23,36 @@ public class MultiPageListener implements Listener {
     @EventHandler(priority = EventPriority.NORMAL)
     public void onInventoryOpen(InventoryOpenEvent event) {
         for (ItemStack item : event.getInventory().getContents()) {
-            LoreManager.bakeItemIfNeeded(item);
+            if (item != null && !item.isEmpty()) {
+                LoreManager.bakeItemIfNeeded(item);
+            }
         }
     }
 
     @EventHandler(priority = EventPriority.NORMAL)
     public void onItemPickup(EntityPickupItemEvent event) {
-        LoreManager.bakeItemIfNeeded(event.getItem().getItemStack());
+        ItemStack item = event.getItem().getItemStack();
+        if (item != null && !item.isEmpty()) {
+            LoreManager.bakeItemIfNeeded(item);
+        }
     }
 
     @EventHandler(priority = EventPriority.NORMAL)
     public void onPlayerJoin(PlayerJoinEvent event) {
         for (ItemStack item : event.getPlayer().getInventory().getContents()) {
-            LoreManager.bakeItemIfNeeded(item);
+            if (item != null && !item.isEmpty()) {
+                LoreManager.bakeItemIfNeeded(item);
+            }
         }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryClick(InventoryClickEvent event) {
         ItemStack item = event.getCurrentItem();
+        
+        // Fast-fail before attempting to bake or flip
+        if (item == null || item.isEmpty() || !item.hasItemMeta()) return;
+        
         LoreManager.bakeItemIfNeeded(item);
 
         String configAction = plugin.getConfig().getString("flip-action", "SWAP_OFFHAND").toUpperCase();
@@ -53,7 +64,6 @@ public class MultiPageListener implements Listener {
         }
 
         if (event.getClick() != targetClickType) return;
-        if (item == null || !item.hasItemMeta()) return;
 
         boolean isBaked = item.getItemMeta().getPersistentDataContainer().has(MultiPageLorePlugin.PAGES_KEY);
 
