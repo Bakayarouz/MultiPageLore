@@ -13,6 +13,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.event.inventory.InventoryType;
 
 import java.util.HashMap;
 import java.util.UUID;
@@ -20,10 +21,8 @@ import java.util.UUID;
 public class MultiPageListener implements Listener {
 
     private final MultiPageLorePlugin plugin;
-    
-    // Cooldown map to prevent macro spam and exploit packets (Stores Player UUID -> Epoch Millis)
     private final HashMap<UUID, Long> flipCooldowns = new HashMap<>();
-    private static final long COOLDOWN_MS = 250; // 0.25 seconds between page turns
+    private static final long COOLDOWN_MS = 250;
 
     public MultiPageListener(MultiPageLorePlugin plugin) {
         this.plugin = plugin;
@@ -32,13 +31,17 @@ public class MultiPageListener implements Listener {
     private boolean isSafeInventory(Inventory inv) {
         if (inv == null) return false;
         InventoryHolder holder = inv.getHolder();
+        // Allow player inventories, physical containers, horses, and the player's personal crafting view
         return holder instanceof org.bukkit.entity.Player || 
                holder instanceof org.bukkit.block.Container || 
-               holder instanceof org.bukkit.entity.AbstractHorse;
+               holder instanceof org.bukkit.entity.AbstractHorse ||
+               inv.getType() == InventoryType.CRAFTING ||
+               inv.getType() == InventoryType.PLAYER;
     }
 
     @EventHandler(priority = EventPriority.NORMAL)
     public void onInventoryOpen(InventoryOpenEvent event) {
+        // Scans the inventory the exact moment a player opens a chest, barrel, OR their own inventory ('E')
         if (isSafeInventory(event.getInventory())) {
             for (ItemStack item : event.getInventory().getContents()) {
                 if (item != null && !item.isEmpty()) {
@@ -94,16 +97,14 @@ public class MultiPageListener implements Listener {
             UUID playerId = player.getUniqueId();
             long now = System.currentTimeMillis();
 
-            // COOLDOWN CHECK: Drop out if the player is spamming the flip action too fast
             if (flipCooldowns.containsKey(playerId)) {
                 long lastFlip = flipCooldowns.get(playerId);
                 if (now - lastFlip < COOLDOWN_MS) {
-                    event.setCancelled(true); // Keep the click safe even during spam
+                    event.setCancelled(true);
                     return;
                 }
             }
 
-            // Update cooldown timestamp
             flipCooldowns.put(playerId, now);
 
             if (LoreManager.flipPage(item)) {
