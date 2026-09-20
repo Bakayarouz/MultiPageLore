@@ -22,15 +22,9 @@ public class MultiPageListener implements Listener {
         this.plugin = plugin;
     }
 
-    /**
-     * GUI PROTECTION CHECK:
-     * Returns true if the inventory is a real container (Player, Chest, Barrel, etc.)
-     * Returns false if the inventory is a virtual UI created by another plugin (Crates, AH, Shops).
-     */
     private boolean isSafeInventory(Inventory inv) {
         if (inv == null) return false;
         InventoryHolder holder = inv.getHolder();
-        // Only allow player inventories, physical block containers, and animal inventories (horses)
         return holder instanceof org.bukkit.entity.Player || 
                holder instanceof org.bukkit.block.Container || 
                holder instanceof org.bukkit.entity.AbstractHorse;
@@ -38,7 +32,6 @@ public class MultiPageListener implements Listener {
 
     @EventHandler(priority = EventPriority.NORMAL)
     public void onInventoryOpen(InventoryOpenEvent event) {
-        // Only automatically scan the opened inventory if it's a real chest/barrel
         if (isSafeInventory(event.getInventory())) {
             for (ItemStack item : event.getInventory().getContents()) {
                 if (item != null && !item.isEmpty()) {
@@ -65,22 +58,17 @@ public class MultiPageListener implements Listener {
         }
     }
 
-    // priority = HIGHEST and NO ignoreCancelled=true to allow ExcellentCrates/zAuctionHouse support
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onInventoryClick(InventoryClickEvent event) {
         ItemStack item = event.getCurrentItem();
         
-        // 1.21.1 Fast-fail: Ignore empty clicks or items without meta instantly
         if (item == null || item.isEmpty() || !item.hasItemMeta()) return;
 
-        // Determine if this is a real inventory or a plugin GUI
         boolean isVirtualGUI = !isSafeInventory(event.getClickedInventory());
 
-        // SECURITY CHECK FOR PVP/TRADE SERVERS: 
-        // If it's a real inventory AND the event was cancelled (by an AntiCheat, CombatLog, or Trade plugin), STOP immediately.
+        // Stop if real inventory action was blocked by an anti-cheat, combat log, or trade plugin
         if (!isVirtualGUI && event.isCancelled()) return;
 
-        // If it's a Virtual GUI (Crates, AH), we ignore the cancellation and bake anyway.
         LoreManager.bakeItemIfNeeded(item);
 
         String configAction = plugin.getConfig().getString("flip-action", "SWAP_OFFHAND").toUpperCase();
@@ -91,17 +79,20 @@ public class MultiPageListener implements Listener {
             targetClickType = ClickType.SWAP_OFFHAND;
         }
 
-        // If they didn't use the flip key, stop here so the GUI plugin/vanilla mechanics can handle the normal click
         if (event.getClick() != targetClickType) return;
 
         boolean isBaked = item.getItemMeta().getPersistentDataContainer().has(MultiPageLorePlugin.PAGES_KEY);
 
         if (isBaked) {
             if (LoreManager.flipPage(item)) {
-                // Always ensure the event stays cancelled after a page flip so they don't move the item
-                event.setCancelled(true); 
+                event.setCancelled(true);
+                
                 Player player = (Player) event.getWhoClicked();
                 
+                // SECURITY PATCH: Force server inventory sync to the client 
+                // to prevent client-side ghost items and duplication glitches.
+                player.updateInventory();
+
                 String soundName = plugin.getConfig().getString("flip-sound", "ITEM_BOOK_PAGE_TURN").toUpperCase();
                 try {
                     Sound sound = Sound.valueOf(soundName);
