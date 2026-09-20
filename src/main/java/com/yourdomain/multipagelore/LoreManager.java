@@ -2,8 +2,10 @@ package com.yourdomain.multipagelore;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
@@ -15,15 +17,13 @@ import java.util.List;
 public class LoreManager {
 
     private static MultiPageLorePlugin plugin;
-
-    private static final String SEPARATOR_TEXT = "---page---";
-    private static final String PAGE_DELIMITER = "\u0000"; 
-    private static final String LINE_DELIMITER = "\u0001"; 
-    private static final int MAX_ALLOWED_PAGES = 5; // Security limit against payload bombs
+    public static final String PAGE_DELIMITER = "\u0000";
+    public static final String LINE_DELIMITER = "\u0001";
+    public static final String SEPARATOR_TEXT = "---page---";
+    private static final int MAX_ALLOWED_PAGES = 5;
 
     private static final GsonComponentSerializer GSON = GsonComponentSerializer.gson();
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
-    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
 
     public static void init(MultiPageLorePlugin instance) {
         plugin = instance;
@@ -31,37 +31,41 @@ public class LoreManager {
 
     public static boolean bakeItemIfNeeded(ItemStack item) {
         if (item == null || item.isEmpty() || !item.hasItemMeta()) return false;
-        
-        ItemMeta meta = item.getItemMeta();
-        if (!meta.hasLore()) return false;
 
+        ItemMeta meta = item.getItemMeta();
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
-        if (pdc.has(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING)) return false; 
+
+        // 1. IDEMPOTENCY CHECK: If already baked, do NOT re-parse. 
+        // This stops MMOItems or dynamic UI refreshes from resetting the player's active page.
+        if (pdc.has(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING)) {
+            int currentPage = pdc.getOrDefault(MultiPageLorePlugin.CURRENT_PAGE_KEY, PersistentDataType.INTEGER, 0);
+            renderPage(item, currentPage);
+            return false;
+        }
+
+        if (!meta.hasLore()) return false;
 
         List<Component> lore = meta.lore();
         if (lore == null) return false;
 
         List<List<Component>> pages = new ArrayList<>();
-        List<Component> currentPage = new ArrayList<>();
+        List<Component> currentPageLines = new ArrayList<>();
         boolean hasSeparator = false;
 
         for (Component line : lore) {
             String plainText = PLAIN.serialize(line);
-            
             if (plainText.contains(SEPARATOR_TEXT)) {
                 hasSeparator = true;
-                pages.add(new ArrayList<>(currentPage));
-                currentPage.clear();
-                
-                // Security: Prevent malicious items with an absurd number of pages
+                pages.add(new ArrayList<>(currentPageLines));
+                currentPageLines.clear();
                 if (pages.size() > MAX_ALLOWED_PAGES) return false;
                 continue;
             }
-            currentPage.add(line);
+            currentPageLines.add(line);
         }
-        
+
         if (!hasSeparator) return false;
-        if (!currentPage.isEmpty()) pages.add(currentPage);
+        if (!currentPageLines.isEmpty()) pages.add(currentPageLines);
 
         StringBuilder serializedData = new StringBuilder();
         for (int i = 0; i < pages.size(); i++) {
@@ -75,7 +79,7 @@ public class LoreManager {
 
         pdc.set(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING, serializedData.toString());
         pdc.set(MultiPageLorePlugin.CURRENT_PAGE_KEY, PersistentDataType.INTEGER, 0);
-        
+
         item.setItemMeta(meta);
         renderPage(item, 0);
         return true;
@@ -83,19 +87,18 @@ public class LoreManager {
 
     public static boolean flipPage(ItemStack item) {
         if (item == null || item.isEmpty() || !item.hasItemMeta()) return false;
+
         ItemMeta meta = item.getItemMeta();
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
 
-        String serializedData = pdc.get(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING);
-        if (serializedData == null) return false;
+        if (!pdc.has(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING)) return false;
 
-        int totalPages = 1;
-        for (int i = 0; i < serializedData.length(); i++) {
-            if (serializedData.charAt(i) == '\u0000') totalPages++;
-        }
+        String rawData = pdc.get(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING);
+        if (rawData == null) return false;
 
-        // Security check against corrupted data bounds
-        if (totalPages > MAX_ALLOWED_PAGES || totalPages <= 1) return false;
+        String[] rawPages = rawData.split(PAGE_DELIMITER, -1);
+        int totalPages = rawPages.length;
+        if (totalPages <= 1) return false;
 
         int currentPage = pdc.getOrDefault(MultiPageLorePlugin.CURRENT_PAGE_KEY, PersistentDataType.INTEGER, 0);
         int nextPage = (currentPage + 1) % totalPages;
@@ -107,58 +110,62 @@ public class LoreManager {
         return true;
     }
 
-    private static void renderPage(ItemStack item, int pageIndex) {
+    public static void renderPage(ItemStack item, int pageIndex) {
+        if (item == null || item.isEmpty() || !item.hasItemMeta()) return;
+
         ItemMeta meta = item.getItemMeta();
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
-        
-        String serializedData = pdc.get(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING);
-        if (serializedData == null) return;
-        
-        String[] pages = serializedData.split(PAGE_DELIMITER);
-        if (pageIndex >= pages.length) return; // Bounds safety check
 
-        String[] lines = pages[pageIndex].split(LINE_DELIMITER);
+        String rawData = pdc.get(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING);
+        if (rawData == null) return;
 
-        int currentPageMaxWidth = 0;
-        if (meta.hasDisplayName()) {
-            currentPageMaxWidth = PLAIN.serialize(meta.displayName()).length();
-        }
+        String[] rawPages = rawData.split(PAGE_DELIMITER, -1);
+        if (pageIndex < 0 || pageIndex >= rawPages.length) pageIndex = 0;
 
-        List<Component> newLore = new ArrayList<>(lines.length + 2);
-        for (String line : lines) {
-            Component deserializedLine = GSON.deserialize(line);
-            newLore.add(deserializedLine);
-            
-            int lineLen = PLAIN.serialize(deserializedLine).length();
-            if (lineLen > currentPageMaxWidth) {
-                currentPageMaxWidth = lineLen;
+        List<Component> finalLore = new ArrayList<>();
+        String[] lineData = rawPages[pageIndex].split(LINE_DELIMITER, -1);
+        for (String lineJson : lineData) {
+            if (!lineJson.isEmpty()) {
+                finalLore.add(GSON.deserialize(lineJson));
             }
         }
 
-        newLore.add(Component.empty());
-        newLore.add(LEGACY.deserialize(generateCenteredFooter(currentPageMaxWidth, pageIndex, pages.length)));
+        // Generate centered dot-indicator footer
+        if (rawPages.length > 1) {
+            finalLore.add(Component.empty());
+            finalLore.add(buildFooter(rawPages.length, pageIndex, meta.hasDisplayName() ? PLAIN.serialize(meta.displayName()) : item.getType().name()));
+        }
 
-        meta.lore(newLore);
+        meta.lore(finalLore);
         item.setItemMeta(meta);
     }
 
-    private static String generateCenteredFooter(int maxCharLength, int currentPage, int totalPages) {
-        String activeDot = plugin.getConfig().getString("active-dot", "&f●");
-        String inactiveDot = plugin.getConfig().getString("inactive-dot", "&7○");
-        String swapIcon = plugin.getConfig().getString("swap-icon", "&eⒻ");
-
-        StringBuilder dots = new StringBuilder();
+    private static Component buildFooter(int totalPages, int currentPage, String itemName) {
+        StringBuilder footerBuilder = new StringBuilder();
         for (int i = 0; i < totalPages; i++) {
-            dots.append(i == currentPage ? activeDot : inactiveDot).append(" ");
+            if (i == currentPage) {
+                footerBuilder.append("● ");
+            } else {
+                footerBuilder.append("○ ");
+            }
         }
-        
-        dots.append(swapIcon);
+        footerBuilder.append("Ⓕ");
 
-        String rawText = PLAIN.serialize(LEGACY.deserialize(dots.toString()));
-        int dotsLen = rawText.length();
-        
-        int spacesRequired = Math.max(0, (maxCharLength - dotsLen) / 2);
-        
-        return " ".repeat(spacesRequired) + dots;
+        // Centering calculation wrapper
+        String dotsText = footerBuilder.toString();
+        int maxLineLength = Math.max(15, itemName.length() * 2);
+        int paddingSize = Math.max(0, (maxLineLength - dotsText.length()) / 2);
+        String padding = " ".repeat(Math.min(paddingSize, 12));
+
+        String activeColor = plugin.getConfig().getString("footer.active-color", "&a");
+        String inactiveColor = plugin.getConfig().getString("footer.inactive-color", "&7");
+        String actionColor = plugin.getConfig().getString("footer.action-color", "&6");
+
+        String formatted = padding + dotsText
+                .replace("●", ChatColor.translateAlternateColorCodes('&', activeColor + "●"))
+                .replace("○", ChatColor.translateAlternateColorCodes('&', inactiveColor + "○"))
+                .replace("Ⓕ", ChatColor.translateAlternateColorCodes('&', actionColor + "Ⓕ"));
+
+        return Component.text(ChatColor.translateAlternateColorCodes('&', formatted));
     }
 }
