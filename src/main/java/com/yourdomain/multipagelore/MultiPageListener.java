@@ -20,25 +20,18 @@ public class MultiPageListener implements Listener {
         this.plugin = plugin;
     }
 
-    // 1. Bake items when opening any inventory (Chests, Vaults, GUIs)
     @EventHandler(priority = EventPriority.NORMAL)
     public void onInventoryOpen(InventoryOpenEvent event) {
         for (ItemStack item : event.getInventory().getContents()) {
             LoreManager.bakeItemIfNeeded(item);
         }
-        // Also check the player's own inventory
-        for (ItemStack item : event.getPlayer().getInventory().getContents()) {
-            LoreManager.bakeItemIfNeeded(item);
-        }
     }
 
-    // 2. Bake items when picked up from the ground
     @EventHandler(priority = EventPriority.NORMAL)
     public void onItemPickup(EntityPickupItemEvent event) {
         LoreManager.bakeItemIfNeeded(event.getItem().getItemStack());
     }
 
-    // 3. Bake items when a player logs in (checks their inventory)
     @EventHandler(priority = EventPriority.NORMAL)
     public void onPlayerJoin(PlayerJoinEvent event) {
         for (ItemStack item : event.getPlayer().getInventory().getContents()) {
@@ -46,15 +39,20 @@ public class MultiPageListener implements Listener {
         }
     }
 
-    // 4. Handle the actual Page Flip (Swap Hand key)
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryClick(InventoryClickEvent event) {
         ItemStack item = event.getCurrentItem();
-        
-        // Safety net: bake on click just in case a plugin gave them the item directly
         LoreManager.bakeItemIfNeeded(item);
 
-        if (event.getClick() != ClickType.SWAP_OFFHAND) return;
+        String configAction = plugin.getConfig().getString("flip-action", "SWAP_OFFHAND").toUpperCase();
+        ClickType targetClickType;
+        try {
+            targetClickType = ClickType.valueOf(configAction);
+        } catch (IllegalArgumentException e) {
+            targetClickType = ClickType.SWAP_OFFHAND;
+        }
+
+        if (event.getClick() != targetClickType) return;
         if (item == null || !item.hasItemMeta()) return;
 
         boolean isBaked = item.getItemMeta().getPersistentDataContainer().has(MultiPageLorePlugin.PAGES_KEY);
@@ -63,7 +61,12 @@ public class MultiPageListener implements Listener {
             if (LoreManager.flipPage(item)) {
                 event.setCancelled(true);
                 Player player = (Player) event.getWhoClicked();
-                player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 1.0f, 1.2f);
+                
+                String soundName = plugin.getConfig().getString("flip-sound", "ITEM_BOOK_PAGE_TURN").toUpperCase();
+                try {
+                    Sound sound = Sound.valueOf(soundName);
+                    player.playSound(player.getLocation(), sound, 1.0f, 1.2f);
+                } catch (IllegalArgumentException ignored) {}
             }
         }
     }
