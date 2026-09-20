@@ -1,41 +1,34 @@
 package com.yourdomain.multipagelore;
 
 import org.bukkit.NamespacedKey;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MultiPageLorePlugin extends JavaPlugin {
-    
+
+    // The keys used to store hidden data (NBT/PersistentDataContainer) on the items
     public static NamespacedKey PAGES_KEY;
     public static NamespacedKey CURRENT_PAGE_KEY;
-    public static NamespacedKey MAX_WIDTH_KEY;
 
     @Override
     public void onEnable() {
-        saveDefaultConfig(); 
+        // Generates the default config.yml if it doesn't exist yet
+        saveDefaultConfig();
 
-        PAGES_KEY = new NamespacedKey(this, "lore_pages");
-        CURRENT_PAGE_KEY = new NamespacedKey(this, "current_page");
-        MAX_WIDTH_KEY = new NamespacedKey(this, "max_width");
-        
+        // Initialize the NamespacedKeys (must be done after the plugin initializes)
+        PAGES_KEY = new NamespacedKey(this, "pages_data");
+        CURRENT_PAGE_KEY = new NamespacedKey(this, "current_page_index");
+
+        // Pass the plugin instance to the LoreManager so it can read the config
         LoreManager.init(this);
-        
+
+        // Register our main listener
         getServer().getPluginManager().registerEvents(new MultiPageListener(this), this);
 
-        // UNIVERSAL ITEM CATCHER - OPTIMIZED FOR 1.21.1
-        // Runs every 10 ticks (0.5 seconds).
-        getServer().getScheduler().runTaskTimer(this, () -> {
-            for (Player player : getServer().getOnlinePlayers()) {
-                for (ItemStack item : player.getInventory().getContents()) {
-                    // Fast-fail before passing to the manager to save CPU
-                    if (item != null && !item.isEmpty() && item.hasItemMeta()) {
-                        LoreManager.bakeItemIfNeeded(item);
-                    }
-                }
-            }
-        }, 10L, 10L);
+        getLogger().info("MultiPageLore has been successfully enabled!");
+    }
 
-        getLogger().info("MultiPageLore optimized for 1.21.1 enabled.");
+    @Override
+    public void onDisable() {
+        getLogger().info("MultiPageLore has been disabled.");
     }
 }
