@@ -1,5 +1,9 @@
 name: MultiPageLore
-version: 1.0.0
+version: 1.0
 main: com.yourdomain.multipagelore.MultiPageLorePlugin
-api-version: "1.21"
-description: High-performance interactive multi-page lore for custom items.
+api-version: 1.20
+commands:
+  multipagelore:
+    description: Admin commands for MultiPageLore
+    permission: multipagelore.admin
+    usage: /<command> reload
