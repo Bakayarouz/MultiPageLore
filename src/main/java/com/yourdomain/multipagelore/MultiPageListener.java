@@ -31,6 +31,21 @@ public class MultiPageListener implements Listener {
     private boolean isSafeInventory(Inventory inv) {
         if (inv == null) return false;
         InventoryHolder holder = inv.getHolder();
+        if (holder == null) return false;
+
+        // Check for MMOItems PluginInventory safely without causing strict class loading issues if absent
+        boolean isMmoItemsUi = false;
+        try {
+            Class<?> pluginInventoryClass = Class.forName("net.Indyuce.mmoitems.gui.PluginInventory");
+            if (pluginInventoryClass.isInstance(holder)) {
+                isMmoItemsUi = true;
+            }
+        } catch (ClassNotFoundException ignored) {
+            // MMOItems is not present on the server
+        }
+
+        if (isMmoItemsUi) return false;
+
         // Allow player inventories, physical containers, horses, and the player's personal crafting view
         return holder instanceof org.bukkit.entity.Player || 
                holder instanceof org.bukkit.block.Container || 
@@ -41,7 +56,6 @@ public class MultiPageListener implements Listener {
 
     @EventHandler(priority = EventPriority.NORMAL)
     public void onInventoryOpen(InventoryOpenEvent event) {
-        // Scans the inventory the exact moment a player opens a chest, barrel, OR their own inventory ('E')
         if (isSafeInventory(event.getInventory())) {
             for (ItemStack item : event.getInventory().getContents()) {
                 if (item != null && !item.isEmpty()) {
