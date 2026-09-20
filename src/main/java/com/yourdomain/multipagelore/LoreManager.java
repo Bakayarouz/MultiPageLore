@@ -19,6 +19,7 @@ public class LoreManager {
     private static final String SEPARATOR_TEXT = "---page---";
     private static final String PAGE_DELIMITER = "\u0000"; 
     private static final String LINE_DELIMITER = "\u0001"; 
+    private static final int MAX_ALLOWED_PAGES = 5; // Security limit against payload bombs
 
     private static final GsonComponentSerializer GSON = GsonComponentSerializer.gson();
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
@@ -51,6 +52,9 @@ public class LoreManager {
                 hasSeparator = true;
                 pages.add(new ArrayList<>(currentPage));
                 currentPage.clear();
+                
+                // Security: Prevent malicious items with an absurd number of pages
+                if (pages.size() > MAX_ALLOWED_PAGES) return false;
                 continue;
             }
             currentPage.add(line);
@@ -72,8 +76,6 @@ public class LoreManager {
         pdc.set(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING, serializedData.toString());
         pdc.set(MultiPageLorePlugin.CURRENT_PAGE_KEY, PersistentDataType.INTEGER, 0);
         
-        // Note: Removed the global MAX_WIDTH calculation from here to improve performance
-        
         item.setItemMeta(meta);
         renderPage(item, 0);
         return true;
@@ -91,6 +93,9 @@ public class LoreManager {
         for (int i = 0; i < serializedData.length(); i++) {
             if (serializedData.charAt(i) == '\u0000') totalPages++;
         }
+
+        // Security check against corrupted data bounds
+        if (totalPages > MAX_ALLOWED_PAGES || totalPages <= 1) return false;
 
         int currentPage = pdc.getOrDefault(MultiPageLorePlugin.CURRENT_PAGE_KEY, PersistentDataType.INTEGER, 0);
         int nextPage = (currentPage + 1) % totalPages;
@@ -110,12 +115,11 @@ public class LoreManager {
         if (serializedData == null) return;
         
         String[] pages = serializedData.split(PAGE_DELIMITER);
+        if (pageIndex >= pages.length) return; // Bounds safety check
+
         String[] lines = pages[pageIndex].split(LINE_DELIMITER);
 
-        // Calculate maximum width for THIS PAGE ONLY
         int currentPageMaxWidth = 0;
-        
-        // Factor in the item name, as it also expands the tooltip box
         if (meta.hasDisplayName()) {
             currentPageMaxWidth = PLAIN.serialize(meta.displayName()).length();
         }
@@ -125,7 +129,6 @@ public class LoreManager {
             Component deserializedLine = GSON.deserialize(line);
             newLore.add(deserializedLine);
             
-            // Measure this specific line
             int lineLen = PLAIN.serialize(deserializedLine).length();
             if (lineLen > currentPageMaxWidth) {
                 currentPageMaxWidth = lineLen;
@@ -133,7 +136,6 @@ public class LoreManager {
         }
 
         newLore.add(Component.empty());
-        // Pass the dynamically calculated width to the footer generator
         newLore.add(LEGACY.deserialize(generateCenteredFooter(currentPageMaxWidth, pageIndex, pages.length)));
 
         meta.lore(newLore);
