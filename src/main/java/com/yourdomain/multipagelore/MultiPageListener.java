@@ -1,6 +1,5 @@
 package com.yourdomain.multipagelore;
 
-import io.lumine.mythic.bukkit.events.MythicMobItemGenerateEvent;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -76,15 +75,6 @@ public class MultiPageListener implements Listener {
             if (item != null && !item.isEmpty()) {
                 LoreManager.bakeItemIfNeeded(item);
             }
-        }
-    }
-
-    // MythicMobs native generation hook for instant pre-baking on drop/command
-    @EventHandler(priority = EventPriority.NORMAL)
-    public void onMythicItemGenerate(MythicMobItemGenerateEvent event) {
-        ItemStack item = event.getItemStack();
-        if (item != null && !item.isEmpty()) {
-            LoreManager.bakeItemIfNeeded(item);
         }
     }
 
