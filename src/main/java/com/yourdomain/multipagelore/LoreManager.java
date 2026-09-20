@@ -20,6 +20,7 @@ public class LoreManager {
     private static final String PAGE_DELIMITER = "\u0000"; 
     private static final String LINE_DELIMITER = "\u0001"; 
 
+    // Native 1.21 Adventure Serializers
     private static final GsonComponentSerializer GSON = GsonComponentSerializer.gson();
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
@@ -29,7 +30,8 @@ public class LoreManager {
     }
 
     public static boolean bakeItemIfNeeded(ItemStack item) {
-        if (item == null || !item.hasItemMeta()) return false;
+        // 1.21.1 Optimization: .isEmpty() is the fastest check for air blocks
+        if (item == null || item.isEmpty() || !item.hasItemMeta()) return false;
         
         ItemMeta meta = item.getItemMeta();
         if (!meta.hasLore()) return false;
@@ -90,7 +92,7 @@ public class LoreManager {
     }
 
     public static boolean flipPage(ItemStack item) {
-        if (item == null || !item.hasItemMeta()) return false;
+        if (item == null || item.isEmpty() || !item.hasItemMeta()) return false;
         ItemMeta meta = item.getItemMeta();
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
 
@@ -146,11 +148,12 @@ public class LoreManager {
             dots.append(i == currentPage ? activeDot : inactiveDot).append(" ");
         }
         
-        // Append custom icon directly without brackets
         dots.append(swapIcon);
 
-        // Strip colors to calculate exact unformatted string length for centering
-        int dotsLen = dots.toString().replaceAll("&[0-9a-fk-or]", "").length();
+        // 1.21.1 Optimization: Use Native Adventure to strip colors instead of slow Regex
+        String rawText = PLAIN.serialize(LEGACY.deserialize(dots.toString()));
+        int dotsLen = rawText.length();
+        
         int spacesRequired = Math.max(0, (maxCharLength - dotsLen) / 2);
         
         return " ".repeat(spacesRequired) + dots;
