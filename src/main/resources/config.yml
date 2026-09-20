@@ -1,0 +1,19 @@
+# ==========================================
+# MultiPageLore Configuration
+# ==========================================
+
+# The action players must perform to flip the page.
+# Options: SWAP_OFFHAND, DROP, RIGHT, SHIFT_RIGHT, MIDDLE
+flip-action: "SWAP_OFFHAND"
+
+# Sound to play when turning a page
+flip-sound: "ITEM_BOOK_PAGE_TURN"
+
+# The icon used for the current page
+active-dot: "&f●"
+
+# The icon used for other pages
+inactive-dot: "&7○"
+
+# The icon shown at the end of the page indicator (e.g., ● ○ ○ Ⓕ)
+swap-icon: "&eⒻ"
