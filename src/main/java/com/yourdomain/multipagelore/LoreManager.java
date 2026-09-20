@@ -3,9 +3,7 @@ package com.yourdomain.multipagelore;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
-import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
-import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
@@ -36,7 +34,6 @@ public class LoreManager {
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
 
         // 1. IDEMPOTENCY CHECK: If already baked, do NOT re-parse. 
-        // This stops MMOItems or dynamic UI refreshes from resetting the player's active page.
         if (pdc.has(MultiPageLorePlugin.PAGES_KEY, PersistentDataType.STRING)) {
             int currentPage = pdc.getOrDefault(MultiPageLorePlugin.CURRENT_PAGE_KEY, PersistentDataType.INTEGER, 0);
             renderPage(item, currentPage);
@@ -133,14 +130,14 @@ public class LoreManager {
         // Generate centered dot-indicator footer
         if (rawPages.length > 1) {
             finalLore.add(Component.empty());
-            finalLore.add(buildFooter(rawPages.length, pageIndex, meta.hasDisplayName() ? PLAIN.serialize(meta.displayName()) : item.getType().name()));
+            finalLore.add(buildFooter(rawPages.length, pageIndex));
         }
 
         meta.lore(finalLore);
         item.setItemMeta(meta);
     }
 
-    private static Component buildFooter(int totalPages, int currentPage, String itemName) {
+    private static Component buildFooter(int totalPages, int currentPage) {
         StringBuilder footerBuilder = new StringBuilder();
         for (int i = 0; i < totalPages; i++) {
             if (i == currentPage) {
@@ -151,17 +148,16 @@ public class LoreManager {
         }
         footerBuilder.append("Ⓕ");
 
-        // Centering calculation wrapper
-        String dotsText = footerBuilder.toString();
-        int maxLineLength = Math.max(15, itemName.length() * 2);
-        int paddingSize = Math.max(0, (maxLineLength - dotsText.length()) / 2);
-        String padding = " ".repeat(Math.min(paddingSize, 12));
+        // Balanced fixed offset layout for clean visual centering
+        int estimatedVisualLength = (totalPages * 2) + 2;
+        int baseOffset = Math.max(1, (24 - estimatedVisualLength) / 2);
+        String padding = " ".repeat(Math.max(0, baseOffset));
 
         String activeColor = plugin.getConfig().getString("footer.active-color", "&a");
         String inactiveColor = plugin.getConfig().getString("footer.inactive-color", "&7");
         String actionColor = plugin.getConfig().getString("footer.action-color", "&6");
 
-        String formatted = padding + dotsText
+        String formatted = padding + footerBuilder.toString()
                 .replace("●", ChatColor.translateAlternateColorCodes('&', activeColor + "●"))
                 .replace("○", ChatColor.translateAlternateColorCodes('&', inactiveColor + "○"))
                 .replace("Ⓕ", ChatColor.translateAlternateColorCodes('&', actionColor + "Ⓕ"));
