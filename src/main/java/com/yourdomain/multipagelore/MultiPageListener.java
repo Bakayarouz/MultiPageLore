@@ -14,9 +14,16 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.HashMap;
+import java.util.UUID;
+
 public class MultiPageListener implements Listener {
 
     private final MultiPageLorePlugin plugin;
+    
+    // Cooldown map to prevent macro spam and exploit packets (Stores Player UUID -> Epoch Millis)
+    private final HashMap<UUID, Long> flipCooldowns = new HashMap<>();
+    private static final long COOLDOWN_MS = 250; // 0.25 seconds between page turns
 
     public MultiPageListener(MultiPageLorePlugin plugin) {
         this.plugin = plugin;
@@ -66,7 +73,6 @@ public class MultiPageListener implements Listener {
 
         boolean isVirtualGUI = !isSafeInventory(event.getClickedInventory());
 
-        // Stop if real inventory action was blocked by an anti-cheat, combat log, or trade plugin
         if (!isVirtualGUI && event.isCancelled()) return;
 
         LoreManager.bakeItemIfNeeded(item);
@@ -84,15 +90,25 @@ public class MultiPageListener implements Listener {
         boolean isBaked = item.getItemMeta().getPersistentDataContainer().has(MultiPageLorePlugin.PAGES_KEY);
 
         if (isBaked) {
+            Player player = (Player) event.getWhoClicked();
+            UUID playerId = player.getUniqueId();
+            long now = System.currentTimeMillis();
+
+            // COOLDOWN CHECK: Drop out if the player is spamming the flip action too fast
+            if (flipCooldowns.containsKey(playerId)) {
+                long lastFlip = flipCooldowns.get(playerId);
+                if (now - lastFlip < COOLDOWN_MS) {
+                    event.setCancelled(true); // Keep the click safe even during spam
+                    return;
+                }
+            }
+
+            // Update cooldown timestamp
+            flipCooldowns.put(playerId, now);
+
             if (LoreManager.flipPage(item)) {
                 event.setCancelled(true);
                 
-                Player player = (Player) event.getWhoClicked();
-                
-                // SECURITY PATCH: Force server inventory sync to the client 
-                // to prevent client-side ghost items and duplication glitches.
-                player.updateInventory();
-
                 String soundName = plugin.getConfig().getString("flip-sound", "ITEM_BOOK_PAGE_TURN").toUpperCase();
                 try {
                     Sound sound = Sound.valueOf(soundName);
