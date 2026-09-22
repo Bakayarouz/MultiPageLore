@@ -17,3 +17,16 @@ inactive-dot: "&7○"
 
 # The icon shown at the end of the page indicator (e.g., ● ○ ○ Ⓕ)
 swap-icon: "&eⒻ"
+
+# Maximum number of pages allowed on a single item. Items with more ---page---
+# tags than this will be left unbaked (their raw lore is shown as-is) rather
+# than silently truncated, to make misconfigured lore easy to spot.
+max-pages: 5
+
+# Fully-qualified Java class names of InventoryHolder implementations that
+# should NEVER be treated as a "safe" inventory for baking or page-flipping
+# (e.g. another plugin's custom GUI menu where SWAP_OFFHAND or similar clicks
+# mean something else). Add more entries here if you run into conflicts with
+# another plugin's menus — no code changes or rebuild required.
+ignored-inventory-holders:
+  - "net.Indyuce.mmoitems.gui.PluginInventory"
